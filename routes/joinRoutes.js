@@ -39,6 +39,7 @@ router.post("/request", authenticate, sendDepartmentRequest);
 Department Head Request Page
 ========================================
 */
+
 router.post(
   "/send-department-request",
   authenticate,
