@@ -13,7 +13,9 @@ const superAdminRoutes = require("./routes/superAdminRoutes"); // ✅ import
 const joinRoutes = require("./routes/joinRoutes");
 const departmentRoutes = require("./routes/departmentRoutes");
 const userRoutes = require("./routes/userRoutes");
+const attendanceRoutes = require("./routes/attendanceRoutes");
 
+// Routes
 const app = express();
 // Middleware setup
 app.use(cors()); // Enable CORS for cross-origin requests
@@ -56,6 +58,8 @@ app.use("/api/join", joinRoutes); // ✅ mount join routes
 app.use("/api/departments", departmentRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/departments", joinRoutes);
+app.use("/api/attendance", attendanceRoutes);
+
 
 // Protected route to get the authenticated user's data
 app.get("/api/auth/me", authenticateToken, async (req, res) => {
