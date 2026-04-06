@@ -1,12 +1,12 @@
-// backend/controllers/userController.js
-
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 
-// ✅ Get current user profile
+// =======================
+// Get current user profile
+// =======================
 exports.getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.userId)
@@ -22,38 +22,43 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-// ✅ Update profile (name, email, profileImage)
+// =======================
+// Update profile (name, email, profileImage)
+// =======================
+// updateProfile
+
 exports.updateProfile = async (req, res) => {
   try {
+    console.log("req.file:", req.file); // DEBUG
+
     const { name, email } = req.body;
+
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     if (name) user.name = name;
     if (email) user.email = email;
 
+    // ✅ FIXED (Cloudinary URL)
     if (req.file) {
-      // Delete old image if exists
-      if (user.profileImage) {
-        let oldImagePath = user.profileImage.replace(`${req.protocol}://${req.get("host")}/`, "");
-        oldImagePath = path.join(__dirname, "..", oldImagePath);
-        if (fs.existsSync(oldImagePath)) fs.unlinkSync(oldImagePath);
-      }
-
-      // Convert local path to URL
-      const filePath = req.file.path.replace(/\\/g, "/"); // Windows fix
-      user.profileImage = `${req.protocol}://${req.get("host")}/${filePath}`;
+      user.profileImage = req.file.path; // 🔥 IMPORTANT
     }
 
     await user.save();
-    res.json({ message: "Profile updated successfully", user });
+
+    res.json({
+      message: "Profile updated successfully",
+      user,
+    });
   } catch (err) {
     console.error("Update profile error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: err.message }); // show real error
   }
 };
 
-// ✅ Change password
+// =======================
+// Change password
+// =======================
 exports.changePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
@@ -61,7 +66,8 @@ exports.changePassword = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Old password incorrect" });
+    if (!isMatch)
+      return res.status(400).json({ message: "Old password incorrect" });
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
@@ -74,7 +80,9 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-// ✅ Request password reset (generate token)
+// =======================
+// Request password reset (generate token)
+// =======================
 exports.requestPasswordReset = async (req, res) => {
   try {
     const { email } = req.body;
@@ -96,7 +104,9 @@ exports.requestPasswordReset = async (req, res) => {
   }
 };
 
-// ✅ Reset password using token
+// =======================
+// Reset password using token
+// =======================
 exports.resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
@@ -104,7 +114,8 @@ exports.resetPassword = async (req, res) => {
       resetToken: token,
       resetTokenExpiry: { $gt: Date.now() },
     });
-    if (!user) return res.status(400).json({ message: "Invalid or expired token" });
+    if (!user)
+      return res.status(400).json({ message: "Invalid or expired token" });
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
@@ -119,7 +130,9 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
-// ✅ Get all pending users (for DepartmentHeadRequestsList)
+// =======================
+// Get all pending users (for DepartmentHeadRequestsList)
+// =======================
 exports.getPendingUsers = async (req, res) => {
   try {
     const users = await User.find()

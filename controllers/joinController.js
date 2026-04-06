@@ -8,7 +8,6 @@ const Staff = require("../models/Staff");
 // backend/controllers/joinController.js
 const User = require("../models/User");
 const Department = require("../models/Department");
-
 // 1️⃣ Workspace preview
 exports.joinWorkspacePreview = async (req, res) => {
   try {
