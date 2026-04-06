@@ -3,7 +3,7 @@
 const mongoose = require("mongoose");
 const Workspace = require("../models/Workspace");
 const User = require("../models/User");
-const cloudinary = require("../config/cloudinary"); // ✅ Add this
+const { cloudinary } = require("../config/cloudinary"); // Cloudinary import
 
 // exports.createWorkspace = async (req, res) => {
 //   try {
@@ -69,12 +69,14 @@ const cloudinary = require("../config/cloudinary"); // ✅ Add this
 
 exports.createWorkspace = async (req, res) => {
   try {
+    // 1️⃣ Ensure user is logged in
     if (!req.userId) {
       return res.status(401).json({ message: "Unauthorized. Please log in." });
     }
 
     const { workspaceName, workspaceCode, role } = req.body;
 
+    // 2️⃣ Validate required fields
     if (!workspaceName || !workspaceCode || !role) {
       return res
         .status(400)
@@ -83,46 +85,47 @@ exports.createWorkspace = async (req, res) => {
 
     console.log("Creating workspace for user:", req.userId);
 
+    // 3️⃣ Check if user exists
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    // 4️⃣ Check if workspace code already exists
     const existingWorkspace = await Workspace.findOne({ code: workspaceCode });
     if (existingWorkspace) {
       return res.status(400).json({ message: "Workspace code already exists" });
     }
 
-    // ✅ Normalize role
+    // 5️⃣ Normalize role
     const validRoles = ["general_manager", "industry_head"];
     const userRole = role.toLowerCase();
     if (!validRoles.includes(userRole)) {
       return res.status(400).json({ message: "Invalid role selected" });
     }
 
+    // 6️⃣ Handle Workspace Logo Upload
     let logoUrl = null;
-
     if (req.file) {
-      // ✅ Upload new logo to Cloudinary (already done by multer-storage-cloudinary)
+      // ✅ req.file.path comes from multer-storage-cloudinary
       logoUrl = req.file.path;
-
-      // Optional: Delete old workspace logo if exists
-      // (useful if you implement workspace update later)
     }
 
+    // 7️⃣ Create Workspace
     const workspace = await Workspace.create({
       name: workspaceName,
       code: workspaceCode,
       status: "pending",
       createdBy: req.userId,
       workspaceRole: userRole,
-      logo: logoUrl,
+      logo: logoUrl, // ✅ Save Cloudinary URL
     });
 
+    // 8️⃣ Assign workspace & role to user
     user.workspaceId = workspace._id;
     user.role = userRole;
     await user.save();
 
+    // 9️⃣ Send response
     const workspaceObj = workspace.toObject();
-
     res.status(201).json({
       message: "Workspace created successfully and role assigned to user",
       workspace: workspaceObj,
