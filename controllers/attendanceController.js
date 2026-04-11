@@ -1,8 +1,18 @@
 const Attendance = require("../models/Attendance");
-const fs = require("fs");
-const path = require("path");
 const getDistance = require("../utils/distance");
-const { OFFICE_LAT, OFFICE_LNG, MAX_DISTANCE_METERS } = require("../config/location");
+const User = require("../models/User");
+const faceapi = require("face-api.js");
+const canvas = require("canvas");
+
+const { Canvas, Image, ImageData } = canvas;
+faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
+
+const {
+  OFFICE_LAT,
+  OFFICE_LNG,
+  MAX_DISTANCE_METERS,
+} = require("../config/location");
+
 const { OFFICE_IPS } = require("../config/ip");
 
 // ✅ Get IP
@@ -14,43 +24,97 @@ const getUserIP = (req) => {
   );
 };
 
+// 🔥 FACE DISTANCE
+const calculateDistance = (desc1, desc2) => {
+  return Math.sqrt(
+    desc1.reduce((sum, val, i) => sum + Math.pow(val - desc2[i], 2), 0)
+  );
+};
+
 // ==============================
 // ✅ CHECK IN
 // ==============================
 exports.checkIn = async (req, res) => {
-  let userIP = "";
-  let latitude = 0;
-  let longitude = 0;
-  let distance = 0;
-
   try {
     const userId = req.user.id;
+    let userIP = "";
+    let latitude = 0;
+    let longitude = 0;
+    let distance = 0;
+
     const { image, latitude: lat, longitude: lng } = req.body;
 
     if (!image || !lat || !lng) {
-      return res.status(400).json({ message: "All fields required" });
+      return res.status(400).json({
+        message: "Image + Location required",
+      });
     }
 
     latitude = parseFloat(lat);
     longitude = parseFloat(lng);
 
-    // 🔐 IP CHECK
+    // =====================
+    // 🔐 FACE CHECK
+    // =====================
+    const user = await User.findById(userId);
+
+    if (!user || !user.faceDescriptor?.length) {
+      return res.status(400).json({
+        message: "Face not registered",
+      });
+    }
+
+    const img = await canvas.loadImage(image);
+
+    const detection = await faceapi
+      .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!detection) {
+      return res.status(400).json({ message: "Face not detected" });
+    }
+
+    const newDescriptor = Array.from(detection.descriptor);
+
+    const faceDistance = calculateDistance(
+      newDescriptor,
+      user.faceDescriptor
+    );
+
+    if (faceDistance > 0.5) {
+      return res.status(403).json({ message: "❌ Face not matched" });
+    }
+
+    // =====================
+    // 🔐 IP + GPS CHECK
+    // =====================
     userIP = getUserIP(req);
     const devIPs = ["127.0.0.1", "::1"];
-    const isIPAllowed = OFFICE_IPS.concat(devIPs).some((ip) => userIP.includes(ip));
+    const isLocalhost = devIPs.includes(userIP);
 
-    // 📍 GPS CHECK
-    distance = getDistance(latitude, longitude, OFFICE_LAT, OFFICE_LNG);
+    const isIPAllowed = OFFICE_IPS.concat(devIPs).some((ip) =>
+      userIP.includes(ip)
+    );
+
+    distance = getDistance(
+      latitude,
+      longitude,
+      OFFICE_LAT,
+      OFFICE_LNG
+    );
+
     const isLocationAllowed = distance <= MAX_DISTANCE_METERS;
 
-    // ❌ Deny if both fail
-    if (!isIPAllowed && !isLocationAllowed) {
+    if (!isLocalhost && !isIPAllowed && !isLocationAllowed) {
       return res.status(403).json({
         message: "❌ Not in office (IP + GPS failed)",
       });
     }
 
-    // 📅 Check if already checked in today
+    // =====================
+    // 📅 TODAY RECORD
+    // =====================
     const start = new Date();
     start.setHours(0, 0, 0, 0);
 
@@ -62,44 +126,62 @@ exports.checkIn = async (req, res) => {
       date: { $gte: start, $lte: end },
     });
 
+    // 🔥 HANDLE EXISTING
     if (existing) {
-      return res.status(400).json({ message: "Already checked in today" });
+      if (existing.status === "Absent") {
+        // ✅ Convert Absent → Late
+        existing.checkIn = new Date();
+        existing.status = "Late";
+        await existing.save();
+
+        return res.status(200).json({
+          message: "⚠️ Late check-in recorded",
+          attendance: existing,
+        });
+      }
+
+      return res.status(400).json({
+        message: "Already checked in today",
+      });
     }
 
-    // 📸 Save image
-    const matches = image.match(/^data:image\/(jpeg|png);base64,(.+)$/);
-    if (!matches) {
-      return res.status(400).json({ message: "Invalid image format" });
-    }
-    const ext = matches[1];
-    const base64Data = matches[2];
+    // =====================
+    // ☁️ CLOUDINARY UPLOAD
+    // =====================
+    const { cloudinary } = require("../config/cloudinary");
 
-    const fileName = `attendance_${Date.now()}.${ext}`;
-    const filePath = path.join(__dirname, "../uploads/", fileName);
+    const uploadResponse = await cloudinary.uploader.upload(image, {
+      folder: "attendance",
+    });
 
-    fs.writeFileSync(filePath, base64Data, "base64");
+    const imageUrl = uploadResponse.secure_url;
 
+    // =====================
+    // ✅ SAVE ATTENDANCE
+    // =====================
     const attendance = new Attendance({
       user: userId,
-      image: fileName,
+      image: imageUrl,
       latitude,
       longitude,
       date: new Date(),
       checkIn: new Date(),
+      status: "Working",
     });
 
     await attendance.save();
 
-    res.status(201).json(attendance);
+    res.status(201).json({
+      message: "✅ Check-in successful",
+      attendance,
+    });
+
+    console.log("User IP:", userIP);
+    console.log("Distance:", distance);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
-
-  // ✅ Debug logs
-  console.log("User IP:", userIP);
-  console.log("Latitude:", latitude, "Longitude:", longitude);
-  console.log("Distance:", distance);
 };
 
 // ==============================
@@ -119,11 +201,21 @@ exports.checkOut = async (req, res) => {
       return res.status(404).json({ message: "Not found" });
     }
 
-    if (attendance.checkOut) {
-      return res.status(400).json({ message: "Already checked out" });
+    if (attendance.status === "Absent") {
+      return res.status(400).json({
+        message: "Marked absent. Check-out not allowed",
+      });
     }
 
-    const hours = (new Date() - new Date(attendance.checkIn)) / (1000 * 60 * 60);
+    if (attendance.checkOut) {
+      return res.status(400).json({
+        message: "Already checked out",
+      });
+    }
+
+    const hours =
+      (new Date() - new Date(attendance.checkIn)) /
+      (1000 * 60 * 60);
 
     if (hours >= 8) {
       return res.status(400).json({
@@ -132,6 +224,8 @@ exports.checkOut = async (req, res) => {
     }
 
     attendance.checkOut = new Date();
+    attendance.status = "Present";
+
     await attendance.save();
 
     res.json(attendance);
@@ -142,11 +236,13 @@ exports.checkOut = async (req, res) => {
 };
 
 // ==============================
-// 📥 GET
+// 📥 GET ATTENDANCE
 // ==============================
 exports.getAttendances = async (req, res) => {
   try {
-    const data = await Attendance.find({ user: req.user.id }).sort({ date: -1 });
+    const data = await Attendance.find({ user: req.user.id }).sort({
+      date: -1,
+    });
     res.json(data);
   } catch (err) {
     console.error(err);
@@ -155,30 +251,31 @@ exports.getAttendances = async (req, res) => {
 };
 
 // ==============================
-// ✅ DEBUG IP & GPS
+// ✅ REGISTER FACE
 // ==============================
-exports.debugIPLocation = (req, res) => {
+exports.registerFace = async (req, res) => {
   try {
-    const userIP =
-      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-      req.socket.remoteAddress ||
-      "";
-    
-    // GPS example from query params (frontend se bhejo)
-    const latitude = req.query.lat || 0;
-    const longitude = req.query.lng || 0;
+    const userId = req.user.id;
+    const { descriptor } = req.body;
 
-    console.log("Debug IP:", userIP);
-    console.log("Debug GPS:", latitude, longitude);
+    if (!descriptor || !Array.isArray(descriptor)) {
+      return res.status(400).json({
+        message: "Face descriptor required",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { faceDescriptor: descriptor },
+      { new: true }
+    );
 
     res.json({
-      ip: userIP,
-      latitude,
-      longitude,
-      message: "IP and location detected successfully",
+      message: "Face registered successfully",
+      user,
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: err.message });
   }
 };

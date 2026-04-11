@@ -6,7 +6,15 @@ const attendanceSchema = new mongoose.Schema({
   image: String,
   latitude: Number,
   longitude: Number,
-
+  status: {
+    type: String,
+    enum: ["Present", "Absent", "Working"],
+    default: "Working",
+  },
+  report: {
+    type: String,
+    default: "",
+  },
   date: Date,
   checkIn: Date,
   checkOut: { type: Date, default: null },

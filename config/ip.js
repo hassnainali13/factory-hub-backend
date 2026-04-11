@@ -1,3 +1,4 @@
+// backend/config/ip.js
 module.exports = {
-  OFFICE_IPS: ["39.45.123.100"], // 👈 apna office IP
+  OFFICE_IPS: ["192.168.18.171"], // 👈 apna office IP
 };

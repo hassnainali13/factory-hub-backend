@@ -17,6 +17,17 @@ const attendanceRoutes = require("./routes/attendanceRoutes");
 
 // Routes
 const app = express();
+
+const faceapi = require("face-api.js");
+
+async function loadModels() {
+  await faceapi.nets.tinyFaceDetector.loadFromDisk("./models");
+  await faceapi.nets.faceLandmark68Net.loadFromDisk("./models");
+  await faceapi.nets.faceRecognitionNet.loadFromDisk("./models");
+  console.log("✅ Face API models loaded");
+}
+
+loadModels();
 // Middleware setup
 app.use(cors()); // Enable CORS for cross-origin requests
 app.use(express.json()); // Parse incoming JSON requests
@@ -83,3 +94,4 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
 app.listen(process.env.PORT, () => {
   console.log(`Server is running on port ${process.env.PORT}`);
 });
+require("./utils/attendanceCron");

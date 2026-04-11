@@ -32,34 +32,30 @@ const userSchema = new mongoose.Schema(
         "industry_head",
       ],
       default: "user",
-      index: true,
     },
 
     workspaceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Workspace",
       default: null,
-      index: true,
     },
 
     departmentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Department",
       default: null,
-      index: true,
     },
 
     requestStatus: {
       type: String,
       enum: ["pending", "approved", "rejected"],
       default: null,
-      index: true,
     },
-    staffstatus:{
+
+    staffstatus: {
       type: String,
       enum: ["pending", "approved", "disabled"],
       default: null,
-      index: true,
     },
 
     profileImage: {
@@ -67,13 +63,14 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    // 🔥 FACE RECOGNITION FIELD
+    faceDescriptor: {
+      type: [Number],
+      default: [],
+    },
+
     resetToken: {
       type: String,
-      default: null,
-    },
-    staffId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Staff",
       default: null,
     },
 
@@ -81,8 +78,14 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    staffId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Staff",
+      default: null,
+    },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("User", userSchema);
