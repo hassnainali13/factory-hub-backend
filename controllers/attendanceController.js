@@ -13,8 +13,6 @@ const {
   MAX_DISTANCE_METERS,
 } = require("../config/location");
 
-const { OFFICE_IPS } = require("../config/ip");
-
 // ✅ Get IP
 const getUserIP = (req) => {
   return (
@@ -24,10 +22,10 @@ const getUserIP = (req) => {
   );
 };
 
-// 🔥 FACE DISTANCE
+// ✅ Face Distance
 const calculateDistance = (desc1, desc2) => {
   return Math.sqrt(
-    desc1.reduce((sum, val, i) => sum + Math.pow(val - desc2[i], 2), 0)
+    desc1.reduce((sum, val, i) => sum + Math.pow(val - desc2[i], 2), 0),
   );
 };
 
@@ -37,33 +35,19 @@ const calculateDistance = (desc1, desc2) => {
 exports.checkIn = async (req, res) => {
   try {
     const userId = req.user.id;
-    let userIP = "";
-    let latitude = 0;
-    let longitude = 0;
-    let distance = 0;
+    const { image, latitude, longitude } = req.body;
 
-    const { image, latitude: lat, longitude: lng } = req.body;
-
-    if (!image || !lat || !lng) {
-      return res.status(400).json({
-        message: "Image + Location required",
-      });
+    if (!image || !latitude || !longitude) {
+      return res.status(400).json({ message: "Image + Location required" });
     }
 
-    latitude = parseFloat(lat);
-    longitude = parseFloat(lng);
-
-    // =====================
-    // 🔐 FACE CHECK
-    // =====================
     const user = await User.findById(userId);
 
     if (!user || !user.faceDescriptor?.length) {
-      return res.status(400).json({
-        message: "Face not registered",
-      });
+      return res.status(400).json({ message: "Face not registered" });
     }
 
+    // 🔥 FACE MATCH
     const img = await canvas.loadImage(image);
 
     const detection = await faceapi
@@ -77,44 +61,22 @@ exports.checkIn = async (req, res) => {
 
     const newDescriptor = Array.from(detection.descriptor);
 
-    const faceDistance = calculateDistance(
-      newDescriptor,
-      user.faceDescriptor
-    );
+    const faceDistance = calculateDistance(newDescriptor, user.faceDescriptor);
 
-    if (faceDistance > 0.5) {
+    if (faceDistance > 0.6) {
       return res.status(403).json({ message: "❌ Face not matched" });
     }
 
-    // =====================
-    // 🔐 IP + GPS CHECK
-    // =====================
-    userIP = getUserIP(req);
-    const devIPs = ["127.0.0.1", "::1"];
-    const isLocalhost = devIPs.includes(userIP);
+    // 🔥 LOCATION CHECK
+    const distance = getDistance(latitude, longitude, OFFICE_LAT, OFFICE_LNG);
 
-    const isIPAllowed = OFFICE_IPS.concat(devIPs).some((ip) =>
-      userIP.includes(ip)
-    );
-
-    distance = getDistance(
-      latitude,
-      longitude,
-      OFFICE_LAT,
-      OFFICE_LNG
-    );
-
-    const isLocationAllowed = distance <= MAX_DISTANCE_METERS;
-
-    if (!isLocalhost && !isIPAllowed && !isLocationAllowed) {
+    if (distance > MAX_DISTANCE_METERS) {
       return res.status(403).json({
-        message: "❌ Not in office (IP + GPS failed)",
+        message: "❌ Not in office location",
       });
     }
 
-    // =====================
-    // 📅 TODAY RECORD
-    // =====================
+    // 🔥 TODAY CHECK
     const start = new Date();
     start.setHours(0, 0, 0, 0);
 
@@ -126,42 +88,16 @@ exports.checkIn = async (req, res) => {
       date: { $gte: start, $lte: end },
     });
 
-    // 🔥 HANDLE EXISTING
     if (existing) {
-      if (existing.status === "Absent") {
-        // ✅ Convert Absent → Late
-        existing.checkIn = new Date();
-        existing.status = "Late";
-        await existing.save();
-
-        return res.status(200).json({
-          message: "⚠️ Late check-in recorded",
-          attendance: existing,
-        });
-      }
-
       return res.status(400).json({
         message: "Already checked in today",
       });
     }
 
-    // =====================
-    // ☁️ CLOUDINARY UPLOAD
-    // =====================
-    const { cloudinary } = require("../config/cloudinary");
-
-    const uploadResponse = await cloudinary.uploader.upload(image, {
-      folder: "attendance",
-    });
-
-    const imageUrl = uploadResponse.secure_url;
-
-    // =====================
-    // ✅ SAVE ATTENDANCE
-    // =====================
+    // 🔥 SAVE
     const attendance = new Attendance({
       user: userId,
-      image: imageUrl,
+      image,
       latitude,
       longitude,
       date: new Date(),
@@ -175,9 +111,6 @@ exports.checkIn = async (req, res) => {
       message: "✅ Check-in successful",
       attendance,
     });
-
-    console.log("User IP:", userIP);
-    console.log("Distance:", distance);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -201,25 +134,9 @@ exports.checkOut = async (req, res) => {
       return res.status(404).json({ message: "Not found" });
     }
 
-    if (attendance.status === "Absent") {
-      return res.status(400).json({
-        message: "Marked absent. Check-out not allowed",
-      });
-    }
-
     if (attendance.checkOut) {
       return res.status(400).json({
         message: "Already checked out",
-      });
-    }
-
-    const hours =
-      (new Date() - new Date(attendance.checkIn)) /
-      (1000 * 60 * 60);
-
-    if (hours >= 8) {
-      return res.status(400).json({
-        message: "Check-out expired (8h limit)",
       });
     }
 
@@ -245,7 +162,6 @@ exports.getAttendances = async (req, res) => {
     });
     res.json(data);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -258,16 +174,30 @@ exports.registerFace = async (req, res) => {
     const userId = req.user.id;
     const { descriptor } = req.body;
 
-    if (!descriptor || !Array.isArray(descriptor)) {
+    if (!Array.isArray(descriptor)) {
+      return res.status(400).json({ message: "Descriptor must be array" });
+    }
+
+    if (descriptor.length !== 128) {
       return res.status(400).json({
-        message: "Face descriptor required",
+        message: "Invalid face descriptor length (must be 128)",
+      });
+    }
+
+    const isValid = descriptor.every(
+      (v) => typeof v === "number" && isFinite(v),
+    );
+
+    if (!isValid) {
+      return res.status(400).json({
+        message: "Corrupted face descriptor detected",
       });
     }
 
     const user = await User.findByIdAndUpdate(
       userId,
       { faceDescriptor: descriptor },
-      { new: true }
+      { new: true },
     );
 
     res.json({
