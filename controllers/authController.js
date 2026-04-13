@@ -1,7 +1,5 @@
 // backend/controllers/authController.js
 
-
-
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
@@ -60,6 +58,9 @@ exports.register = async (req, res) => {
 // ==========================
 // LOGIN
 // ==========================
+// ==========================
+// LOGIN
+// ==========================
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -67,7 +68,11 @@ exports.login = async (req, res) => {
     // SUPERADMIN LOGIN
     if (email === SUPERADMIN_EMAIL) {
       if (password === SUPERADMIN_PASSWORD) {
-        const token = createToken({ userId: "superadmin", role: "superadmin", email });
+        const token = createToken({
+          userId: "superadmin",
+          role: "superadmin",
+          email,
+        });
 
         return res.json({
           message: "Login success",
@@ -75,20 +80,51 @@ exports.login = async (req, res) => {
           user: { email, role: "superadmin" },
         });
       } else {
-        return res.status(400).json({ message: "Invalid password for Superadmin." });
+        return res
+          .status(400)
+          .json({ message: "Invalid password for Superadmin." });
       }
     }
 
+    // 🔥 ADD THESE (NO BREAKING CHANGE)
+    const Staff = require("../models/Staff");
+    const Department = require("../models/Department");
+
     // NORMAL USER LOGIN
-    const user = await User.findOne({ email }).populate("workspaceId");
+    const user = await User.findOne({ email })
+      .populate("workspaceId")
+      .populate("departmentId");
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ message: "Invalid credentials" });
 
-    // ✅ Create token
-    const token = createToken({ userId: user._id, role: user.role, email });
+    // 🔥 RESOLVE WORKSPACE (MAIN FIX)
+    let workspaceId = user.workspaceId?._id || user.workspaceId;
+
+    // Department Head case
+    if (!workspaceId && user.departmentId) {
+      workspaceId = user.departmentId.workspaceId;
+    }
+
+    // Staff case (IMPORTANT FIX)
+    if (!workspaceId && user.staffId) {
+      const staff = await Staff.findById(user.staffId);
+
+      if (staff?.departmentId) {
+        const dept = await Department.findById(staff.departmentId);
+        workspaceId = dept?.workspaceId;
+      }
+    }
+
+    // ✅ Create token (optional improvement)
+    const token = createToken({
+      userId: user._id,
+      role: user.role,
+      email,
+      workspaceId: workspaceId || null,
+    });
 
     res.json({
       message: "Login success",
@@ -99,20 +135,19 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
 
-        // Workspace info
-        workspaceId: user.workspaceId?._id || null,
+        // 🔥 FIXED WORKSPACE
+        workspaceId: workspaceId || null,
+
         workspaceStatus: user.workspaceId?.status || null,
         workspaceName: user.workspaceId?.name || null,
         workspaceLogo: user.workspaceId?.logo || null,
 
-        // ✅ Department head request info
-        requestStatus: user.requestStatus || null, // "pending" | "approved" | "rejected" | null
+        requestStatus: user.requestStatus || null,
         departmentId: user.departmentId || null,
 
         staffstatus: user.staffstatus || null,
         staffId: user.staffId || null,
       },
-
     });
   } catch (err) {
     console.error("Login error:", err);
