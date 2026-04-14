@@ -1,6 +1,5 @@
 const AttendanceTimeConfig = require("../models/AttendanceTimeConfig");
-const resolveWorkspaceId = require("../utils/resolveWorkspace");
-
+const { resolveWorkspaceId } = require("../utils/resolveWorkspace");
 // 🔥 GET
 exports.getAttendanceTimeConfig = async (req, res) => {
   try {

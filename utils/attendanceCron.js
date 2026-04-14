@@ -1,7 +1,12 @@
+// utils/attendanceCron.js
 const cron = require("node-cron");
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const AttendanceTimeConfig = require("../models/AttendanceTimeConfig");
+
+const {
+  resolveWorkspaceIdFromUserId,
+} = require("./resolveWorkspace");
 
 // ===============================
 // TIME CONVERTER
@@ -13,65 +18,93 @@ const toMinutes = (time) => {
 };
 
 // ===============================
-// AUTO ABSENT CRON (EVERY MINUTE)
+// AUTO ABSENT CRON
 // ===============================
 cron.schedule("* * * * *", async () => {
   try {
-    console.log("⏳ Auto Absent Cron Running...");
-
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    // get all workspace configs
+    console.log("⏳ Cron:", now.toLocaleTimeString());
+
     const configs = await AttendanceTimeConfig.find();
+    const allUsers = await User.find();
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
     for (const config of configs) {
       const absentStart = toMinutes(config.absentStart);
       const absentEnd = toMinutes(config.absentEnd);
 
-      // ⛔ outside absent window
-      if (currentMinutes < absentStart || currentMinutes > absentEnd) {
+      console.log({
+        currentMinutes,
+        absentStart,
+        absentEnd,
+      });
+
+      // ✅ TIME WINDOW CHECK
+      if (!(currentMinutes >= absentStart && currentMinutes <= absentEnd)) {
         continue;
       }
 
-      // workspace users
-      const users = await User.find({
-        workspaceId: config.workspaceId,
-      });
+      console.log("🔥 ABSENT WINDOW ACTIVE");
 
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      const users = [];
 
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
+      // ===============================
+      // WORKSPACE MATCHING
+      // ===============================
+      for (const user of allUsers) {
+        const workspaceId = await resolveWorkspaceIdFromUserId(user._id);
 
-      for (const user of users) {
-        // check today's attendance
-        const existing = await Attendance.findOne({
-          user: user._id,
-          date: { $gte: todayStart, $lte: todayEnd },
-        });
+        // 🔥 DEBUG LOG (SAFE INSIDE LOOP)
+        // console.log("User:", user._id, "Workspace:", workspaceId);
 
-        // ❌ already exists → skip
-        if (existing) continue;
+        if (!workspaceId) continue;
 
-        await Attendance.updateOne(
-          {
+        if (
+          workspaceId.toString() === config.workspaceId.toString()
+        ) {
+          users.push(user);
+        }
+      }
+
+      console.log("👥 Matched Users:", users.length);
+
+      if (!users.length) continue;
+
+      // ===============================
+      // BULK ABSENT INSERT
+      // ===============================
+      const bulkOps = users.map((user) => ({
+        updateOne: {
+          filter: {
             user: user._id,
-            date: { $gte: todayStart, $lte: todayEnd },
+            date: {
+              $gte: todayStart,
+              $lte: todayEnd,
+            },
           },
-          {
+          update: {
             $setOnInsert: {
               user: user._id,
               date: new Date(),
               status: "Absent",
             },
           },
-          { upsert: true },
-        );
+          upsert: true,
+        },
+      }));
 
-        console.log(`❌ Absent marked for user: ${user._id}`);
-      }
+      await Attendance.bulkWrite(bulkOps);
+
+      console.log(
+        `✅ Absent marked for workspace: ${config.workspaceId}`
+      );
     }
   } catch (err) {
     console.error("❌ AUTO ABSENT ERROR:", err);
