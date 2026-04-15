@@ -1,4 +1,3 @@
-
 // backend/server.js
 
 require("dotenv").config();
@@ -7,6 +6,9 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 
+// =============================
+// ✅ ROUTES IMPORT
+// =============================
 const authRoutes = require("./routes/authRoutes");
 const workspaceRoutes = require("./routes/workspaceRoutes");
 const superAdminRoutes = require("./routes/superAdminRoutes");
@@ -21,7 +23,7 @@ const User = require("./models/User");
 const app = express();
 
 // =============================
-// ✅ FACE API MODEL LOAD (FIXED)
+// ✅ FACE API SETUP
 // =============================
 const faceapi = require("face-api.js");
 const canvas = require("canvas");
@@ -29,38 +31,35 @@ const canvas = require("canvas");
 const { Canvas, Image, ImageData } = canvas;
 faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
 
+// 🔥 LOAD MODELS FUNCTION
+const path = require("path");
+
 async function loadModels() {
   try {
-    await faceapi.nets.tinyFaceDetector.loadFromDisk("./models");
-    await faceapi.nets.faceLandmark68Net.loadFromDisk("./models");
-    await faceapi.nets.faceRecognitionNet.loadFromDisk("./models");
+    const modelPath = path.join(__dirname, "models/FaceApiModels");
+
+    await faceapi.nets.tinyFaceDetector.loadFromDisk(modelPath);
+    await faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath);
+    await faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath);
+
     console.log("✅ Face API models loaded");
   } catch (err) {
     console.error("❌ Face model load error:", err);
+    throw err; // ❗ important so server doesn't start
   }
 }
-
-loadModels();
 
 // =============================
 // ✅ MIDDLEWARE
 // =============================
 app.use(cors());
-app.use(express.json({ limit: "10mb" })); // 🔥 IMPORTANT for base64 image
+app.use(express.json({ limit: "10mb" }));
 
 app.use("/uploads", express.static("uploads"));
 app.use("/ProfileImage", express.static("ProfileImage"));
 
 // =============================
-// ✅ DB CONNECTION
-// =============================
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch((error) => console.error("❌ DB Error:", error));
-
-// =============================
-// ✅ AUTH MIDDLEWARE (FIXED)
+// ✅ AUTH MIDDLEWARE
 // =============================
 const authenticateToken = (req, res, next) => {
   const token = req.header("Authorization")?.split(" ")[1];
@@ -72,7 +71,6 @@ const authenticateToken = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // 🔥 IMPORTANT FIX
     req.user = { id: decoded.userId };
 
     next();
@@ -92,6 +90,7 @@ app.use("/api/departments", departmentRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/attendance-time-config", attendanceTimeConfigRoutes);
+
 // =============================
 // ✅ AUTH USER ROUTE
 // =============================
@@ -113,13 +112,30 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
 });
 
 // =============================
-// ✅ CRON JOB LOAD (FIXED)
+// ✅ CRON JOB
 // =============================
-require("./utils/attendanceCron"); // 🔥 correct path
+require("./utils/attendanceCron");
 
 // =============================
-// ✅ START SERVER
+// ✅ START SERVER (FINAL FIX)
 // =============================
-app.listen(process.env.PORT, () => {
-  console.log(`🚀 Server running on port ${process.env.PORT}`);
-});
+const startServer = async () => {
+  try {
+    // 🔥 1. Load Face Models FIRST
+    await loadModels();
+
+    // 🔥 2. Connect MongoDB
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("✅ MongoDB Connected");
+
+    // 🔥 3. Start Server
+    app.listen(process.env.PORT, () => {
+      console.log(`🚀 Server running on port ${process.env.PORT}`);
+    });
+
+  } catch (error) {
+    console.error("❌ Server start error:", error);
+  }
+};
+
+startServer();
