@@ -1,17 +1,31 @@
 const nodemailer = require("nodemailer");
 
 // ==========================
+// DEBUG (VERY IMPORTANT)
+// ==========================
+console.log("SENDGRID_API_KEY:", process.env.SENDGRID_API_KEY ? "Loaded" : "Missing");
+console.log("EMAIL_USER:", process.env.EMAIL_USER);
+
+// ==========================
 // SENDGRID TRANSPORTER
 // ==========================
 const transporter = nodemailer.createTransport({
   host: "smtp.sendgrid.net",
   port: 587,
+  secure: false,
   auth: {
-    user: "apikey", // fixed (DO NOT CHANGE)
+    user: "apikey",
     pass: process.env.SENDGRID_API_KEY,
   },
-  connectionTimeout: 20000,
-  socketTimeout: 20000,
+});
+
+// 🔥 VERIFY CONNECTION
+transporter.verify((err, success) => {
+  if (err) {
+    console.log("❌ SMTP ERROR:", err);
+  } else {
+    console.log("✅ SMTP READY");
+  }
 });
 
 // ==========================
@@ -22,42 +36,21 @@ const sendOTPEmail = async (email, otp) => {
     console.log("📧 Sending OTP to:", email);
 
     const info = await transporter.sendMail({
-      from: `"FactoryHub" <${process.env.EMAIL_USER}>`, // ✅ IMPORTANT
+      from: `"FactoryHub" <${process.env.EMAIL_USER}>`, // must be verified
       to: email,
       subject: "FactoryHub OTP Verification",
-
       html: `
-        <div style="font-family:Arial; padding:20px;">
-          <h2>FactoryHub Verification</h2>
-
-          <p>Your OTP code is:</p>
-
-          <div style="
-            font-size:30px;
-            font-weight:bold;
-            letter-spacing:5px;
-            color:#1d4ed8;
-            padding:10px;
-            border:2px dashed #3b82f6;
-            text-align:center;
-            margin:20px 0;
-          ">
-            ${otp}
-          </div>
-
-          <p>This code expires in 10 minutes.</p>
-        </div>
+        <h2>Your OTP Code</h2>
+        <h1>${otp}</h1>
+        <p>Expires in 10 minutes</p>
       `,
     });
 
-    // 🔥 DEBUG LOGS
-    console.log("📬 FULL RESPONSE:", info);
-    console.log("📬 MESSAGE ID:", info.messageId);
-    console.log("📬 RESPONSE:", info.response);
-
+    console.log("✅ Email sent:", info.messageId);
     return info;
+
   } catch (err) {
-    console.error("❌ Email send failed:", err.message);
+    console.error("❌ Email send failed:", err);
     return null;
   }
 };
