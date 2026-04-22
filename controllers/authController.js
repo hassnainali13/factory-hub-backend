@@ -204,7 +204,6 @@ exports.register = async (req, res) => {
     await sendOTPEmail(email, otp);
 
     res.json({ message: "OTP sent to email" });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -244,7 +243,6 @@ exports.verifyOTP = async (req, res) => {
     await TempUser.deleteOne({ email });
 
     res.json({ message: "Account created", userId: user._id });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -273,7 +271,6 @@ exports.resendOTP = async (req, res) => {
     await sendOTPEmail(email, otp);
 
     res.json({ message: "OTP resent" });
-
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
@@ -294,7 +291,13 @@ exports.login = async (req, res) => {
           role: "superadmin",
         });
 
-        return res.json({ token });
+        return res.json({
+          token,
+          user: {
+            email,
+            role: "superadmin",
+          },
+        });
       }
     }
 
@@ -327,7 +330,6 @@ exports.login = async (req, res) => {
     });
 
     res.json({ message: "Login success", token, user });
-
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
