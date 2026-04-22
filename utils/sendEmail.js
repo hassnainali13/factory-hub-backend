@@ -1,124 +1,105 @@
 const nodemailer = require("nodemailer");
+
+// ==========================
+// TRANSPORTER (RAILWAY FIXED)
+// ==========================
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 587,
   secure: false,
+
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+
   tls: {
     rejectUnauthorized: false,
   },
-  family: 4, // 🔥 FORCE IPv4 (IMPORTANT FIX)
+
+  family: 4, // 🔥 FORCE IPv4 (IMPORTANT FOR RAILWAY)
 });
 
+// ==========================
+// SEND OTP EMAIL
+// ==========================
 const sendOTPEmail = async (email, otp) => {
-  await transporter.sendMail({
-    from: `"FactoryHub" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: "FactoryHub – Your Verification Code",
-    html: `
+  try {
+    await transporter.sendMail({
+      from: `"FactoryHub" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "FactoryHub – Your Verification Code",
+
+      html: `
       <div style="
-        font-family: 'Segoe UI', Arial, sans-serif;
+        font-family: Arial, sans-serif;
         max-width: 480px;
-        margin: 0 auto;
+        margin: auto;
         background: #f9fafb;
-        border: 1px solid #e5e7eb;
         border-radius: 12px;
         overflow: hidden;
+        border: 1px solid #e5e7eb;
       ">
 
-        <!-- Header -->
         <div style="
           background: #1d4ed8;
-          padding: 28px 32px;
+          padding: 25px;
           text-align: center;
+          color: white;
+          font-size: 22px;
+          font-weight: bold;
         ">
-          <h1 style="
-            margin: 0;
-            color: #ffffff;
-            font-size: 24px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-          ">⚙️ FactoryHub</h1>
-          <p style="
-            margin: 6px 0 0;
-            color: #bfdbfe;
-            font-size: 13px;
-          ">Factory Management Platform</p>
+          ⚙️ FactoryHub
         </div>
 
-        <!-- Body -->
-        <div style="padding: 32px;">
-          <h2 style="
-            margin: 0 0 8px;
-            color: #111827;
-            font-size: 18px;
-          ">Verify Your Email Address</h2>
-          <p style="
-            margin: 0 0 24px;
-            color: #6b7280;
-            font-size: 14px;
-            line-height: 1.6;
-          ">
-            Use the OTP code below to complete your registration.
-            This code is valid for <strong>10 minutes</strong>.
+        <div style="padding: 30px;">
+          <h2 style="color:#111827;">Verify Your Email</h2>
+
+          <p style="color:#6b7280;">
+            Use this OTP to complete registration. It is valid for 10 minutes.
           </p>
 
-          <!-- OTP Box -->
           <div style="
-            background: #eff6ff;
-            border: 2px dashed #3b82f6;
-            border-radius: 10px;
+            margin: 25px 0;
             padding: 20px;
             text-align: center;
-            margin-bottom: 24px;
+            border: 2px dashed #3b82f6;
+            background: #eff6ff;
+            border-radius: 10px;
           ">
-            <p style="
-              margin: 0 0 6px;
-              font-size: 12px;
-              color: #6b7280;
-              text-transform: uppercase;
-              letter-spacing: 1px;
-            ">Your OTP Code</p>
             <h1 style="
-              margin: 0;
-              font-size: 40px;
-              font-weight: 800;
+              font-size: 36px;
+              letter-spacing: 6px;
               color: #1d4ed8;
-              letter-spacing: 8px;
+              margin: 0;
             ">${otp}</h1>
           </div>
 
-          <p style="
-            margin: 0;
-            font-size: 13px;
-            color: #9ca3af;
-            line-height: 1.6;
-          ">
-            If you did not request this code, please ignore this email.
-            Your account will remain secure.
+          <p style="color:#9ca3af; font-size: 13px;">
+            If you did not request this, ignore this email.
           </p>
         </div>
 
-        <!-- Footer -->
         <div style="
-          background: #f3f4f6;
-          border-top: 1px solid #e5e7eb;
-          padding: 16px 32px;
-          text-align: center;
+          background:#f3f4f6;
+          text-align:center;
+          padding: 15px;
+          font-size: 12px;
+          color:#9ca3af;
         ">
-          <p style="
-            margin: 0;
-            font-size: 12px;
-            color: #9ca3af;
-          ">© ${new Date().getFullYear()} FactoryHub. All rights reserved.</p>
+          © ${new Date().getFullYear()} FactoryHub
         </div>
 
       </div>
-    `,
-  });
+      `,
+    });
+
+  } catch (error) {
+    console.error("❌ Email send failed:", error.message);
+
+    // 🔥 IMPORTANT: DON'T CRASH SERVER
+    // just log error
+  }
 };
 
 module.exports = { sendOTPEmail };

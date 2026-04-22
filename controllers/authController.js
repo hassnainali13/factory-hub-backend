@@ -268,7 +268,11 @@ exports.resendOTP = async (req, res) => {
     tempUser.otpExpiry = Date.now() + 10 * 60 * 1000;
 
     await tempUser.save();
-    await sendOTPEmail(email, otp);
+    try {
+      await sendOTPEmail(email, otp);
+    } catch (err) {
+      console.error("OTP email failed:", err.message);
+    }
 
     res.json({ message: "OTP resent" });
   } catch (err) {
