@@ -84,8 +84,25 @@ const userSchema = new mongoose.Schema(
       ref: "Staff",
       default: null,
     },
+
+    otp: {
+  type: String,
+  default: null
+},
+
+otpExpiry: {
+  type: Date,
+  default: null
+},
+
+isVerified: {
+  type: Boolean,
+  default: false
+}
   },
   { timestamps: true }
 );
+
+
 
 module.exports = mongoose.model("User", userSchema);
