@@ -1,39 +1,30 @@
 const nodemailer = require("nodemailer");
 
-// ==========================
-// TRANSPORTER (RAILWAY SAFE)
-// ==========================
-
-
 const transporter = nodemailer.createTransport({
-  service: "gmail", // 🔥 IMPORTANT FIX
+  host: "smtp.sendgrid.net",
+  port: 587,
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: "apikey",
+    pass: process.env.SENDGRID_API_KEY,
   },
-  family: 4,
-  connectionTimeout: 20000,
-  socketTimeout: 20000,
 });
 
-// ==========================
-// SEND OTP EMAIL
-// ==========================
 const sendOTPEmail = async (email, otp) => {
   try {
+    console.log("📧 Sending OTP to:", email);
+
     const info = await transporter.sendMail({
-      from: `"FactoryHub" <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_USER,
       to: email,
-      subject: "FactoryHub OTP",
-      text: `Your OTP is ${otp}`,
+      subject: "FactoryHub OTP Verification",
+      html: `<h2>Your OTP: ${otp}</h2>`,
     });
 
-    console.log("📬 Email sent:", info.response);
+    console.log("✅ Email sent:", info.response);
     return info;
-
-  } catch (error) {
-    console.error("❌ Email send failed:", error.message);
-    throw error;
+  } catch (err) {
+    console.error("❌ Email error:", err.message);
+    return null;
   }
 };
 

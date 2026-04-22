@@ -201,8 +201,11 @@ exports.register = async (req, res) => {
       otpExpiry: Date.now() + 10 * 60 * 1000,
     });
 
-    await sendOTPEmail(email, otp);
-
+try {
+  await sendOTPEmail(email, otp);
+} catch (err) {
+  console.log("Email failed but continue");
+}
     res.json({ message: "OTP sent to email" });
   } catch (err) {
     console.error(err);
