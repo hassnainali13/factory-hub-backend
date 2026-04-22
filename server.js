@@ -52,7 +52,13 @@ async function loadModels() {
 // =============================
 // ✅ MIDDLEWARE
 // =============================
-app.use(cors());
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 app.use(express.json({ limit: "10mb" }));
 
 app.use("/uploads", express.static("uploads"));
@@ -132,7 +138,6 @@ const startServer = async () => {
     app.listen(process.env.PORT, () => {
       console.log(`🚀 Server running on port ${process.env.PORT}`);
     });
-
   } catch (error) {
     console.error("❌ Server start error:", error);
   }
