@@ -5,65 +5,6 @@ const Workspace = require("../models/Workspace");
 const User = require("../models/User");
 const { cloudinary } = require("../config/cloudinary"); // Cloudinary import
 
-// exports.createWorkspace = async (req, res) => {
-//   try {
-//     // Ensure user is logged in
-//     if (!req.userId) {
-//       return res.status(401).json({ message: "Unauthorized. Please log in." });
-//     }
-
-//     // Destructure the body to extract workspace details
-//     const { workspaceName, workspaceCode, role } = req.body;
-
-//     // Validate input fields
-//     if (!workspaceName || !workspaceCode || !role) {
-//       return res
-//         .status(400)
-//         .json({ message: "Workspace name, code, and role are required" });
-//     }
-
-//     console.log("Creating workspace for user:", req.userId);
-
-//     // Check if user exists
-//     const user = await User.findById(req.userId);
-//     if (!user) {
-//       return res.status(404).json({ message: "User not found" });
-//     }
-
-//     // Check if workspace code already exists
-//     const existingWorkspace = await Workspace.findOne({ code: workspaceCode });
-//     if (existingWorkspace) {
-//       return res.status(400).json({ message: "Workspace code already exists" });
-//     }
-
-//     // Create workspace
-//     const workspace = await Workspace.create({
-//       name: workspaceName,
-//       code: workspaceCode,
-//       status: "pending",
-//       createdBy: req.userId,
-//       logo: req.file?.path || null,
-//       workspaceRole: role,
-//     });
-
-//     // Link workspace to user and assign role
-//     user.workspaceId = workspace._id; // Assign workspace to user
-//     user.role = role; // Assign the role to the user
-//     await user.save();
-
-//     // ✅ Convert to plain object before sending to avoid 500
-//     const workspaceObj = workspace.toObject();
-
-//     // Return success response with workspace details
-//     res.status(201).json({
-//       message: "Workspace created successfully and role assigned to user",
-//       workspace: workspaceObj,
-//     });
-//   } catch (error) {
-//     console.error("Workspace creation error:", error);
-//     res.status(500).json({ message: "Server error while creating workspace" });
-//   }
-// };
 
 // The rest of your controller stays exactly the same
 
