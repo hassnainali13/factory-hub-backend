@@ -17,6 +17,7 @@ const departmentRoutes = require("./routes/departmentRoutes");
 const userRoutes = require("./routes/userRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
 const attendanceTimeConfigRoutes = require("./routes/attendanceTimeConfigRoutes");
+const hrDepartmentRoutes = require("./routes/hr_departmentRoutes");
 
 const User = require("./models/User");
 
@@ -96,6 +97,7 @@ app.use("/api/departments", departmentRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/attendance-time-config", attendanceTimeConfigRoutes);
+app.use("/api/hr-department", hrDepartmentRoutes);
 
 // =============================
 // ✅ AUTH USER ROUTE

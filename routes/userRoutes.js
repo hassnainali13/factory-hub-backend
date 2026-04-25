@@ -18,5 +18,7 @@ router.put(
 
 router.put("/change-password", authenticate, userController.changePassword);
 router.get("/pending", authenticate, userController.getPendingUsers);
+// ✅ NEW — HR Dashboard workspace users
+router.get("/workspace-users", authenticate, userController.getWorkspaceUsers);
 
 module.exports = router;

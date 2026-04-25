@@ -200,6 +200,8 @@ exports.getAllWorkspaces = async (req, res) => {
   }
 };
 exports.getWorkspaceDetail = async (req, res) => {
+
+  
   try {
     const { id } = req.params;
 

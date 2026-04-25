@@ -187,7 +187,6 @@
 // //   }
 // // };
 
-
 // const bcrypt = require("bcryptjs");
 // const jwt = require("jsonwebtoken");
 // const User = require("../models/User");
@@ -373,7 +372,6 @@
 //   }
 // };
 
-
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
@@ -435,8 +433,10 @@ exports.verifyOTP = async (req, res) => {
     const tempUser = await TempUser.findOne({ email });
 
     if (!tempUser) return res.status(404).json({ message: "Signup again" });
-    if (tempUser.otp !== otp) return res.status(400).json({ message: "Invalid OTP" });
-    if (tempUser.otpExpiry < Date.now()) return res.status(400).json({ message: "OTP expired" });
+    if (tempUser.otp !== otp)
+      return res.status(400).json({ message: "Invalid OTP" });
+    if (tempUser.otpExpiry < Date.now())
+      return res.status(400).json({ message: "OTP expired" });
 
     const user = await User.create({
       name: tempUser.name,
@@ -463,7 +463,8 @@ exports.resendOTP = async (req, res) => {
     const { email } = req.body;
 
     const tempUser = await TempUser.findOne({ email });
-    if (!tempUser) return res.status(404).json({ message: "No pending signup" });
+    if (!tempUser)
+      return res.status(404).json({ message: "No pending signup" });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     tempUser.otp = otp;
@@ -500,7 +501,16 @@ exports.login = async (req, res) => {
       }
     }
 
-    const user = await User.findOne({ email });
+    // ✅ populate("departmentId") added
+    const user = await User.findOne({ email })
+      .populate("departmentId")
+      .populate({
+        path: "staffId",
+        populate: {
+          path: "departmentId" // nested populate
+           // grab what you need
+        },
+      });
     const tempUser = await TempUser.findOne({ email });
 
     if (!user && tempUser) {
@@ -518,10 +528,12 @@ exports.login = async (req, res) => {
 
     const token = createToken({ userId: user._id, role: user.role });
 
-    // ✅ Workspace status fetch karo agar workspaceId hai
+    // ✅ Workspace status fetch
     let workspaceStatus = null;
     if (user.workspaceId) {
-      const workspace = await Workspace.findById(user.workspaceId).select("status");
+      const workspace = await Workspace.findById(user.workspaceId).select(
+        "status",
+      );
       workspaceStatus = workspace?.status || null;
     }
 
@@ -532,7 +544,7 @@ exports.login = async (req, res) => {
       token,
       user: {
         ...userObj,
-        workspaceStatus, // ✅ yeh ab response mein aayega
+        workspaceStatus,
       },
     });
   } catch (err) {
