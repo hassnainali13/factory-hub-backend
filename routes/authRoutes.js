@@ -17,15 +17,22 @@ const {
   register,
   login,
   verifyOTP,
+  verifyResetPasswordOTP,
   resendOTP,
+  resendResetOTP,
+  forgotPassword,
+  resetPassword,
 } = require("../controllers/authController");
 
 const router = express.Router();
 
 router.post("/register", register);
-router.post("/login", login); // Uncommented login route
-router.post("/verify-otp", verifyOTP);
-router.post("/resend-otp", resendOTP);
 router.post("/login", login);
+router.post("/verify-otp", verifyOTP);
+router.post("/verify-reset-otp", verifyResetPasswordOTP);
+router.post("/resend-otp", resendOTP);
+router.post("/resend-reset-otp", resendResetOTP);
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 
 module.exports = router;

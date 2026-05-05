@@ -482,6 +482,63 @@ exports.resendOTP = async (req, res) => {
 };
 
 // ==========================
+// VERIFY RESET PASSWORD OTP
+// ==========================
+exports.verifyResetPasswordOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.otp || user.otp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    if (user.otpExpiry < Date.now()) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    res.json({ message: "OTP verified" });
+  } catch (err) {
+    console.error("Verify reset password OTP error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ==========================
+// RESEND RESET PASSWORD OTP
+// ==========================
+exports.resendResetOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
+    user.otpExpiry = Date.now() + 10 * 60 * 1000;
+    await user.save();
+
+    sendOTPEmail(email, otp)
+      .then(() => console.log("✅ Resend reset OTP sent"))
+      .catch((err) =>
+        console.log("❌ Resend reset email failed:", err.message),
+      );
+
+    res.json({ message: "OTP resent" });
+  } catch (err) {
+    console.error("Resend reset password OTP error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ==========================
 // LOGIN
 // ==========================
 exports.login = async (req, res) => {
@@ -507,8 +564,8 @@ exports.login = async (req, res) => {
       .populate({
         path: "staffId",
         populate: {
-          path: "departmentId" // nested populate
-           // grab what you need
+          path: "departmentId", // nested populate
+          // grab what you need
         },
       });
     const tempUser = await TempUser.findOne({ email });
@@ -549,6 +606,69 @@ exports.login = async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otp = otp;
+    user.otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save();
+
+    sendOTPEmail(email, otp)
+      .then(() => console.log("✅ Forgot password OTP sent"))
+      .catch((err) =>
+        console.log("❌ Forgot password email failed:", err.message),
+      );
+
+    res.json({ message: "OTP sent to email for password reset" });
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ==========================
+// RESET PASSWORD
+// ==========================
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword, confirmPassword } = req.body;
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: "Passwords do not match" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.otp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    if (user.otpExpiry < Date.now()) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    user.password = hash;
+    user.otp = null; // clear OTP
+    user.otpExpiry = null;
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+  } catch (err) {
+    console.error("Reset password error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

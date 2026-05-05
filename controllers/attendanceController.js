@@ -2,6 +2,7 @@
 const Attendance = require("../models/Attendance");
 const getDistance = require("../utils/distance");
 const User = require("../models/User");
+const Staff = require("../models/Staff");
 const faceapi = require("face-api.js");
 const canvas = require("canvas");
 
@@ -163,6 +164,299 @@ exports.getAttendances = async (req, res) => {
     });
     res.json(data);
   } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ==============================
+// ✅ SUBMIT ATTENDANCE REPORT
+// ==============================
+exports.submitReport = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { report } = req.body;
+
+    if (!report || !report.trim()) {
+      return res.status(400).json({ message: "Report text is required" });
+    }
+
+    const attendance = await Attendance.findOne({ _id: id, user: userId });
+
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
+    }
+
+    if (attendance.status !== "Absent") {
+      return res
+        .status(400)
+        .json({ message: "Only absent attendance can be reported" });
+    }
+
+    if (attendance.reportStatus === "approved") {
+      return res
+        .status(400)
+        .json({ message: "This report has already been approved" });
+    }
+
+    if (attendance.reportStatus === "rejected") {
+      return res
+        .status(400)
+        .json({ message: "Rejected reports cannot be resubmitted" });
+    }
+
+    attendance.report = report.trim();
+    attendance.reportStatus = "pending";
+
+    await attendance.save();
+
+    res.json({ attendance });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ==============================
+// ✅ PENDING ATTENDANCE REPORTS
+// ==============================
+exports.getPendingReports = async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user.id)
+      .populate("departmentId")
+      .populate("staffId");
+
+    if (!currentUser) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    let department = currentUser.departmentId || null;
+
+    if (!department && currentUser.staffId) {
+      const staffDoc = await Staff.findById(currentUser.staffId).populate(
+        "departmentId",
+      );
+      department = staffDoc?.departmentId || null;
+    }
+
+    if (!department) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const isHRDepartment = String(department.department)
+      .toLowerCase()
+      .includes("hr");
+
+    if (!isHRDepartment) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const reports = await Attendance.find({
+      report: { $exists: true, $ne: "" },
+      reportStatus: "pending",
+    })
+      .sort({ date: -1 })
+      .populate("user", "name email");
+
+    const hrStaffDocs = await Staff.find({ departmentId: department._id });
+    const hrStaffUserIds = hrStaffDocs.map((doc) => doc.userId);
+
+    const hrStaffUsers = await User.find({
+      _id: { $in: hrStaffUserIds },
+      role: "staff",
+    }).sort({ _id: 1 });
+
+    const staffIds = hrStaffUsers.map((u) => String(u._id));
+
+    const assignedReports = reports.map((report, index) => {
+      const assignedIndex = staffIds.length ? index % staffIds.length : null;
+      const assignedUser =
+        assignedIndex !== null ? hrStaffUsers[assignedIndex] : null;
+      return {
+        ...report.toObject(),
+        assignedTo: assignedUser ? assignedUser._id : null,
+        assignedToName: assignedUser
+          ? assignedUser.name || assignedUser.email
+          : null,
+      };
+    });
+
+    if (currentUser.role === "department_head") {
+      return res.json({ reports: assignedReports });
+    }
+
+    const filtered = assignedReports.filter(
+      (report) => String(report.assignedTo) === String(currentUser._id),
+    );
+
+    res.json({ reports: filtered });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const resolveUserDepartment = async (currentUser) => {
+  if (currentUser.departmentId) return currentUser.departmentId;
+  if (currentUser.staffId) {
+    const staffDoc = await Staff.findById(currentUser.staffId).populate(
+      "departmentId",
+    );
+    return staffDoc?.departmentId || null;
+  }
+  return null;
+};
+
+const isHRDepartment = (department) =>
+  Boolean(
+    department && String(department.department).toLowerCase().includes("hr"),
+  );
+
+const getHrStaffUsersByDepartment = async (departmentId) => {
+  const hrStaffDocs = await Staff.find({ departmentId });
+  const hrStaffUserIds = hrStaffDocs.map((doc) => doc.userId);
+  return User.find({
+    _id: { $in: hrStaffUserIds },
+    role: "staff",
+  }).sort({ _id: 1 });
+};
+
+const getAssignedReportInfo = (reports, hrStaffUsers) => {
+  return reports.map((report, index) => {
+    const assignedIndex = hrStaffUsers.length
+      ? index % hrStaffUsers.length
+      : null;
+    const assignedUser =
+      assignedIndex !== null ? hrStaffUsers[assignedIndex] : null;
+    return {
+      reportId: String(report._id),
+      assignedTo: assignedUser ? String(assignedUser._id) : null,
+    };
+  });
+};
+
+const authorizeStaffForReport = async (currentUser, reportId) => {
+  const department = await resolveUserDepartment(currentUser);
+  if (!department || !isHRDepartment(department)) {
+    return false;
+  }
+
+  const hrStaffUsers = await getHrStaffUsersByDepartment(department._id);
+  if (!hrStaffUsers.length) {
+    return false;
+  }
+
+  const reports = await Attendance.find({
+    report: { $exists: true, $ne: "" },
+    reportStatus: "pending",
+  })
+    .sort({ date: -1 })
+    .select("_id");
+
+  const assignedReports = getAssignedReportInfo(reports, hrStaffUsers);
+  const reportInfo = assignedReports.find(
+    (item) => item.reportId === String(reportId),
+  );
+
+  return reportInfo?.assignedTo === String(currentUser._id);
+};
+
+// ==============================
+// ✅ APPROVE ATTENDANCE REPORT
+// ==============================
+exports.approveReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const attendance = await Attendance.findById(id);
+
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
+    }
+
+    if (!attendance.report || attendance.reportStatus !== "pending") {
+      return res
+        .status(400)
+        .json({ message: "No pending report available for approval" });
+    }
+
+    if (attendance.status !== "Absent") {
+      return res
+        .status(400)
+        .json({ message: "Only absent attendance reports can be approved" });
+    }
+
+    const currentUser = await User.findById(req.user.id)
+      .populate("departmentId")
+      .populate("staffId");
+
+    if (!currentUser) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    if (currentUser.role === "staff") {
+      const authorized = await authorizeStaffForReport(currentUser, id);
+      if (!authorized) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    }
+
+    attendance.status = "Present";
+    attendance.reportStatus = "approved";
+
+    await attendance.save();
+
+    res.json({ attendance });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.rejectReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const attendance = await Attendance.findById(id);
+
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
+    }
+
+    if (!attendance.report || attendance.reportStatus !== "pending") {
+      return res
+        .status(400)
+        .json({ message: "No pending report available for rejection" });
+    }
+
+    if (attendance.status !== "Absent") {
+      return res
+        .status(400)
+        .json({ message: "Only absent attendance reports can be rejected" });
+    }
+
+    const currentUser = await User.findById(req.user.id)
+      .populate("departmentId")
+      .populate("staffId");
+
+    if (!currentUser) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    if (currentUser.role === "staff") {
+      const authorized = await authorizeStaffForReport(currentUser, id);
+      if (!authorized) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    }
+
+    attendance.reportStatus = "rejected";
+
+    await attendance.save();
+
+    res.json({ attendance });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
