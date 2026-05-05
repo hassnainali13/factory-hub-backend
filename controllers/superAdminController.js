@@ -1,12 +1,13 @@
 // backend/controllers/superAdminController.js
 const Workspace = require("../models/Workspace");
+const User = require("../models/User"); // ✅ User import added
 
 exports.getAllWorkspaces = async (req, res) => {
   try {
     const workspaces = await Workspace.find()
       .populate({
-        path: "createdBy",  // yaha user reference populate karna
-        select: "name",      // sirf name chahiye admin ke liye
+        path: "createdBy",
+        select: "name",
       });
 
     res.status(200).json({ workspaces });
@@ -32,11 +33,22 @@ exports.approveWorkspace = async (req, res) => {
 exports.rejectWorkspace = async (req, res) => {
   try {
     const { id } = req.params;
-    const workspace = await Workspace.findByIdAndDelete(id);
+
+    // ✅ findByIdAndDelete ki jagah pehle find karo taake createdBy mile
+    const workspace = await Workspace.findById(id);
 
     if (!workspace) {
       return res.status(404).json({ message: "Workspace not found" });
     }
+
+    // ✅ User ka role aur workspaceId reset karo
+    await User.findByIdAndUpdate(workspace.createdBy, {
+      role: "user",
+      workspaceId: null,
+    });
+
+    // ✅ Ab workspace delete karo
+    await Workspace.findByIdAndDelete(id);
 
     res.status(200).json({ message: "Workspace rejected and deleted" });
   } catch (err) {
