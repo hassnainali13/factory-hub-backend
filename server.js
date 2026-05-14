@@ -53,6 +53,7 @@ async function loadModels() {
 // =============================
 // ✅ MIDDLEWARE
 // =============================
+
 const corsOptions = {
   origin: function (origin, callback) {
     callback(null, true);
@@ -72,6 +73,7 @@ app.use("/ProfileImage", express.static("ProfileImage"));
 // =============================
 // ✅ AUTH MIDDLEWARE
 // =============================
+
 const authenticateToken = (req, res, next) => {
   const token = req.header("Authorization")?.split(" ")[1];
 
@@ -93,6 +95,7 @@ const authenticateToken = (req, res, next) => {
 // =============================
 // ✅ ROUTES
 // =============================
+
 app.use("/api/auth", authRoutes);
 app.use("/api/workspaces", workspaceRoutes);
 app.use("/api/superadmin", superAdminRoutes);
@@ -106,6 +109,7 @@ app.use("/api/hr-department", hrDepartmentRoutes);
 // =============================
 // ✅ AUTH USER ROUTE
 // =============================
+
 app.get("/api/auth/me", authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).populate({
