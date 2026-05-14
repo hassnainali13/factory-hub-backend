@@ -141,6 +141,7 @@ app.use((err, req, res, next) => {
 // =============================
 // ✅ CRON JOB
 // =============================
+
 require("./utils/attendanceCron");
 
 // =============================
@@ -163,5 +164,6 @@ const startServer = async () => {
     console.error("❌ Server start error:", error);
   }
 };
+
 
 startServer();
