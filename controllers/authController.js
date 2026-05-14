@@ -377,6 +377,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const TempUser = require("../models/TempUser");
 const Workspace = require("../models/Workspace");
+const { resolveWorkspaceId } = require("../utils/resolveWorkspace");
 const { sendOTPEmail } = require("../utils/sendEmail");
 
 const SUPERADMIN_EMAIL = process.env.SUPERADMIN_EMAIL;
@@ -585,12 +586,15 @@ exports.login = async (req, res) => {
 
     const token = createToken({ userId: user._id, role: user.role });
 
-    // ✅ Workspace status fetch
+    const resolvedWorkspaceId =
+      user.workspaceId ||
+      (await resolveWorkspaceId({ userId: user._id })) ||
+      null;
+
     let workspaceStatus = null;
-    if (user.workspaceId) {
-      const workspace = await Workspace.findById(user.workspaceId).select(
-        "status",
-      );
+    if (resolvedWorkspaceId) {
+      const workspace =
+        await Workspace.findById(resolvedWorkspaceId).select("status");
       workspaceStatus = workspace?.status || null;
     }
 
@@ -602,6 +606,10 @@ exports.login = async (req, res) => {
       user: {
         ...userObj,
         workspaceStatus,
+        workspaceId:
+          resolvedWorkspaceId ||
+          userObj.workspaceId?._id ||
+          userObj.workspaceId,
       },
     });
   } catch (err) {

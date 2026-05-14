@@ -1,4 +1,3 @@
-
 //backend\controllers\departmentController.js
 const User = require("../models/User");
 const Department = require("../models/Department");
@@ -19,8 +18,22 @@ exports.getDepartments = async (req, res) => {
       .populate("deptHeadId", "name")
       .lean();
 
+    // ✅ Calculate current employees for each department
+    const departmentsWithCount = await Promise.all(
+      departments.map(async (dept) => {
+        const count = await Staff.countDocuments({
+          departmentId: dept._id,
+          status: "active",
+        });
+        return {
+          ...dept,
+          currentEmployees: count,
+        };
+      }),
+    );
+
     // ✅ Create headName field for frontend
-    const formattedDepartments = departments.map((d) => ({
+    const formattedDepartments = departmentsWithCount.map((d) => ({
       ...d,
       headName: d.deptHeadId?.name || null,
     }));
@@ -104,6 +117,49 @@ exports.rejectDepartment = async (req, res) => {
   }
 };
 
+// ✅ Update department staff limit
+exports.updateDepartmentLimit = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { employeesLimit } = req.body;
+    const parsedLimit = Number(employeesLimit);
+
+    if (!Number.isInteger(parsedLimit) || parsedLimit <= 0) {
+      return res.status(400).json({
+        message: "Staff limit must be a positive whole number",
+      });
+    }
+
+    const department = await Department.findById(id);
+    if (!department) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    const approvedStaffCount = await Staff.countDocuments({
+      departmentId: department._id,
+      status: "active",
+    });
+
+    if (parsedLimit < approvedStaffCount) {
+      return res.status(400).json({
+        message: `Staff limit cannot be lower than current approved staff count (${approvedStaffCount}).`,
+      });
+    }
+
+    department.employeesLimit = parsedLimit;
+    department.currentEmployees = approvedStaffCount;
+    await department.save();
+
+    res.json({
+      message: "Staff limit updated successfully",
+      department,
+    });
+  } catch (err) {
+    console.error("updateDepartmentLimit error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // ✅ Approve Department Head Request (NEW - does not break old system)
 exports.approveHeadRequest = async (req, res) => {
   try {
@@ -122,10 +178,8 @@ exports.approveHeadRequest = async (req, res) => {
 
     // 2️⃣ Approve selected user
     user.requestStatus = "approved";
-    user.role = "department_head";
-    await user.save();
 
-    // 3️⃣ Assign department head
+    // 3️⃣ Assign department head and role from department config
     const department = await Department.findByIdAndUpdate(
       deptId,
       {
@@ -134,6 +188,12 @@ exports.approveHeadRequest = async (req, res) => {
       },
       { new: true },
     );
+
+    if (!department)
+      return res.status(404).json({ message: "Department not found" });
+
+    user.role = department.head || "department_head";
+    await user.save();
 
     if (!department)
       return res.status(404).json({ message: "Department not found" });
@@ -207,7 +267,8 @@ exports.getDepartmentWithStaff = async (req, res) => {
     // 3️⃣ Send combined response
     res.json({
       ...department,
-      workspaceName: department.workspaceId?.workspaceName || "Workspace Not Assigned",
+      workspaceName:
+        department.workspaceId?.workspaceName || "Workspace Not Assigned",
       headName: department.deptHeadId?.name || "Not Assigned",
       users: staffMembers,
     });
@@ -234,7 +295,10 @@ exports.getMyDepartment = async (req, res) => {
       if (staffDoc?.departmentId) {
         department = await Department.findById(staffDoc.departmentId)
           .populate({ path: "workspaceId", select: "name logo status" })
-          .populate({ path: "deptHeadId", select: "name email role profileImage" });
+          .populate({
+            path: "deptHeadId",
+            select: "name email role profileImage",
+          });
       }
     }
 
@@ -244,7 +308,10 @@ exports.getMyDepartment = async (req, res) => {
       if (user?.departmentId) {
         department = await Department.findById(user.departmentId)
           .populate({ path: "workspaceId", select: "name logo status" })
-          .populate({ path: "deptHeadId", select: "name email role profileImage" });
+          .populate({
+            path: "deptHeadId",
+            select: "name email role profileImage",
+          });
       }
     }
 
@@ -310,6 +377,10 @@ exports.approveStaffRequest = async (req, res) => {
         staffId: staff._id, // ✅ ADD STAFF ID HERE
       });
     }
+
+    await Department.findByIdAndUpdate(staff.departmentId, {
+      $inc: { currentEmployees: 1 },
+    });
 
     res.json({ message: "Staff approved successfully" });
   } catch (error) {

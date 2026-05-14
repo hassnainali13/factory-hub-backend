@@ -483,6 +483,7 @@ const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
+const { resolveWorkspaceId } = require("../utils/resolveWorkspace");
 
 // =======================
 // Get current user profile
@@ -491,11 +492,29 @@ exports.getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.userId)
       .select("-password")
-      .populate("workspaceId", "name logo")
-      .populate("departmentId", "department head");
+      .populate("workspaceId", "name logo status")
+      .populate("departmentId", "department head workspaceId");
 
     if (!user) return res.status(404).json({ message: "User not found" });
-    res.json(user);
+
+    const resolvedWorkspaceId =
+      user.workspaceId?._id || (await resolveWorkspaceId(req)) || null;
+    let workspaceStatus = null;
+
+    if (resolvedWorkspaceId) {
+      const workspace = await require("../models/Workspace").findById(
+        resolvedWorkspaceId,
+      );
+      workspaceStatus = workspace?.status || null;
+    }
+
+    const userObj = user.toObject();
+    res.json({
+      ...userObj,
+      workspaceStatus,
+      workspaceId:
+        resolvedWorkspaceId || userObj.workspaceId?._id || userObj.workspaceId,
+    });
   } catch (err) {
     console.error("Get profile error:", err);
     res.status(500).json({ message: "Server error" });

@@ -56,3 +56,29 @@ exports.rejectWorkspace = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// ✅ TEMPORARY: Update user role (for development)
+exports.updateUserRole = async (req, res) => {
+  try {
+    const { userId, role } = req.body;
+
+    if (!userId || !role) {
+      return res.status(400).json({ message: "userId and role are required" });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { role },
+      { new: true }
+    ).select("name email role");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ message: "User role updated", user });
+  } catch (err) {
+    console.error("Update user role error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};

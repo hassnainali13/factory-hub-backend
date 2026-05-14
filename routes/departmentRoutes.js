@@ -5,6 +5,8 @@ const router = express.Router();
 
 const authenticate = require("../middleware/authMiddleware");
 const allowRoles = require("../middleware/roleMiddleware");
+const Staff = require("../models/Staff");
+const Department = require("../models/Department");
 
 const {
   getDepartments,
@@ -17,8 +19,38 @@ const {
   getStaffOverview,
   approveStaffRequest,
   rejectStaffRequest,
+  updateDepartmentLimit,
   getDepartmentWithStaff,
 } = require("../controllers/departmentController");
+
+const allowDepartmentStaffApproval = async (req, res, next) => {
+  try {
+    if (req.role === "hr_department") {
+      return next();
+    }
+
+    const staff = await Staff.findById(req.params.staffId).populate(
+      "departmentId",
+    );
+    if (!staff) {
+      return res.status(404).json({ message: "Staff request not found" });
+    }
+
+    const department = staff.departmentId;
+    if (!department) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    if (String(department.deptHeadId) === String(req.userId)) {
+      return next();
+    }
+
+    return res.status(403).json({ message: "Access denied." });
+  } catch (error) {
+    console.error("Department staff approval auth error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
 
 // ✅ GET departments (workspaceId required)
 router.get("/", authenticate, getDepartments);
@@ -46,6 +78,14 @@ router.patch(
   allowRoles("general_manager", "industry_head"),
   rejectDepartment,
 );
+
+// ✅ PATCH update department staff limit (ONLY GM)
+router.patch(
+  "/limit/:id",
+  authenticate,
+  allowRoles("general_manager", "industry_head"),
+  updateDepartmentLimit,
+);
 // backend/routes/departmentRoutes.js
 // backend/routes/departmentRoutes.js
 router.patch(
@@ -56,24 +96,19 @@ router.patch(
 );
 
 router.get("/my-department", authenticate, getMyDepartment);
-router.get(
-  "/staff-overview",
-  authenticate,
-  allowRoles("department_head"),
-  getDepartmentStaffOverview,
-);
-router.get("/staff-overview", authenticate, getStaffOverview);
+router.get("/staff-overview", authenticate, getDepartmentStaffOverview);
+router.get("/all-staff-overview", authenticate, getStaffOverview);
 router.patch(
   "/staff/:staffId/approve",
   authenticate,
-  allowRoles("department_head"),
+  allowDepartmentStaffApproval,
   approveStaffRequest,
 );
 
 router.patch(
   "/staff/:staffId/reject",
   authenticate,
-  allowRoles("department_head"),
+  allowDepartmentStaffApproval,
   rejectStaffRequest,
 );
 
@@ -85,6 +120,5 @@ router.get(
   allowRoles("general_manager", "industry_head", "department_head"),
   getDepartmentWithStaff,
 );
-
 
 module.exports = router;

@@ -5,7 +5,6 @@ const Workspace = require("../models/Workspace");
 const User = require("../models/User");
 const { cloudinary } = require("../config/cloudinary"); // Cloudinary import
 
-
 // The rest of your controller stays exactly the same
 
 exports.createWorkspace = async (req, res) => {
@@ -200,8 +199,6 @@ exports.getAllWorkspaces = async (req, res) => {
   }
 };
 exports.getWorkspaceDetail = async (req, res) => {
-
-  
   try {
     const { id } = req.params;
 
@@ -228,6 +225,35 @@ exports.getWorkspaceDetail = async (req, res) => {
     });
   } catch (error) {
     console.error("Workspace detail error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.updateWorkspaceStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const validStatuses = ["active", "disabled"];
+
+    if (!validStatuses.includes(status)) {
+      return res
+        .status(400)
+        .json({ message: "Invalid workspace status provided" });
+    }
+
+    const workspace = await Workspace.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true },
+    );
+
+    if (!workspace) {
+      return res.status(404).json({ message: "Workspace not found" });
+    }
+
+    res.json({ message: `Workspace status updated to ${status}`, workspace });
+  } catch (error) {
+    console.error("Update workspace status error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

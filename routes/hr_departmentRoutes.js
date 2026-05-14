@@ -12,7 +12,7 @@ const {
 router.get(
   "/users",
   authenticate,
-  allowRoles("department_head"),
+  allowRoles("department_head", "hr_department"),
   getAllUsersInWorkspace,
 );
 

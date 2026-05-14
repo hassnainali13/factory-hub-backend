@@ -23,21 +23,47 @@ exports.joinWorkspacePreview = async (req, res) => {
     }
 
     // ✅ Departments
-    // ✅ Departments
     const departments = await Department.find({
       workspaceId: workspace._id,
       status: { $in: ["active", "pending", "disabled"] },
     })
-      .select("department status deptHeadId")
+      .select("department status deptHeadId employeesLimit currentEmployees")
       .populate("deptHeadId", "name");
 
+    const departmentIds = departments.map((d) => d._id);
+    const staffCounts = await Staff.aggregate([
+      {
+        $match: {
+          departmentId: { $in: departmentIds },
+          status: "active",
+        },
+      },
+      {
+        $group: {
+          _id: "$departmentId",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const countMap = staffCounts.reduce((acc, cur) => {
+      acc[cur._id.toString()] = cur.count;
+      return acc;
+    }, {});
+
     // ✅ YAHAN headName create kar rahe hain
-    const formattedDepartments = departments.map((d) => ({
-      _id: d._id,
-      department: d.department,
-      status: d.status,
-      headName: d.deptHeadId?.name || null,
-    }));
+    const formattedDepartments = departments.map((d) => {
+      const activeCount = countMap[d._id.toString()] || 0;
+      return {
+        _id: d._id,
+        department: d.department,
+        status: d.status,
+        headName: d.deptHeadId?.name || null,
+        employeesLimit: d.employeesLimit || 0,
+        currentEmployees: activeCount,
+        isFull: d.employeesLimit > 0 && activeCount >= d.employeesLimit,
+      };
+    });
 
     res.json({
       workspaceId: workspace._id,
@@ -109,7 +135,7 @@ exports.sendDepartmentRequest = async (req, res) => {
     // ✅ Update user status
     user.departmentId = department._id;
     user.requestStatus = "pending";
-    user.role = "user";
+    user.role = "department_head";
     await user.save();
 
     res.json({ message: "Tumhari request General Manager ko chali gai hai" });
@@ -177,7 +203,7 @@ exports.sendDepartmentHeadRequest = async (req, res) => {
     // ✅ Update user
     user.departmentId = department._id;
     user.requestStatus = "pending";
-    user.role = "user";
+    user.role = "department_head";
     await user.save();
 
     res.json({ message: "Department head request sent successfully" });
@@ -465,6 +491,28 @@ exports.sendStaffJoinRequest = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         message: "User not found",
+      });
+    }
+
+    const department = await Department.findById(req.body.departmentId);
+    if (!department) {
+      return res.status(404).json({
+        message: "Department not found",
+      });
+    }
+
+    const activeStaffCount = await Staff.countDocuments({
+      departmentId: department._id,
+      status: "active",
+    });
+
+    if (
+      department.employeesLimit > 0 &&
+      activeStaffCount >= department.employeesLimit
+    ) {
+      return res.status(400).json({
+        message:
+          "This department has reached its staff capacity and cannot accept new requests.",
       });
     }
 

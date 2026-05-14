@@ -26,11 +26,7 @@
 // router.get("/", authenticate, getAllWorkspaces); // public workspace list
 // router.get("/:id", authenticate, getWorkspaceDetail);
 
-
-
-
 // module.exports = router;
-
 
 const express = require("express");
 const { uploadWorkspaceLogo } = require("../config/cloudinary");
@@ -40,18 +36,31 @@ const {
   joinWorkspace,
   getAllWorkspaces,
   getWorkspaceDetail,
+  updateWorkspaceStatus,
 } = require("../controllers/workspaceController");
 const authenticate = require("../middleware/authMiddleware");
+const allowRoles = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
 // ✅ Use Cloudinary multer for workspace logo
-router.post("/create", authenticate, uploadWorkspaceLogo.single("logo"), createWorkspace);
+router.post(
+  "/create",
+  authenticate,
+  uploadWorkspaceLogo.single("logo"),
+  createWorkspace,
+);
 
 router.post("/request", authenticate, requestWorkspace);
 router.post("/join", authenticate, joinWorkspace);
 
 router.get("/", authenticate, getAllWorkspaces);
 router.get("/:id", authenticate, getWorkspaceDetail);
+router.put(
+  "/:id/status",
+  authenticate,
+  allowRoles("general_manager", "industry_head", "superadmin"),
+  updateWorkspaceStatus,
+);
 
 module.exports = router;

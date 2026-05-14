@@ -256,7 +256,7 @@ exports.getPendingReports = async (req, res) => {
       reportStatus: "pending",
     })
       .sort({ date: -1 })
-      .populate("user", "name email");
+      .populate("user", "name email role");
 
     const hrStaffDocs = await Staff.find({ departmentId: department._id });
     const hrStaffUserIds = hrStaffDocs.map((doc) => doc.userId);

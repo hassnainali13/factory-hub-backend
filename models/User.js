@@ -24,13 +24,6 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: [
-        "user",
-        "general_manager",
-        "department_head",
-        "staff",
-        "industry_head",
-      ],
       default: "user",
     },
 
@@ -86,23 +79,21 @@ const userSchema = new mongoose.Schema(
     },
 
     otp: {
-  type: String,
-  default: null
-},
+      type: String,
+      default: null,
+    },
 
-otpExpiry: {
-  type: Date,
-  default: null
-},
+    otpExpiry: {
+      type: Date,
+      default: null,
+    },
 
-isVerified: {
-  type: Boolean,
-  default: false
-}
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
-
-
 
 module.exports = mongoose.model("User", userSchema);
