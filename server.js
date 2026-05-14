@@ -127,6 +127,17 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
   }
 });
 
+// JSON 404 handler for unknown API routes
+app.use((req, res) => {
+  res.status(404).json({ message: "Route not found" });
+});
+
+// JSON error handler
+app.use((err, req, res, next) => {
+  console.error("Unhandled server error:", err);
+  res.status(500).json({ message: "Server error" });
+});
+
 // =============================
 // ✅ CRON JOB
 // =============================

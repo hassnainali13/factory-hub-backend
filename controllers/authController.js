@@ -392,7 +392,15 @@ const createToken = (payload) => {
 // ==========================
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role } = req.body || {};
+
+    console.log("[REGISTER] request body:", req.body);
+
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        message: "Missing required fields: name, email, password",
+      });
+    }
 
     const exist = await User.findOne({ email });
     if (exist) {
