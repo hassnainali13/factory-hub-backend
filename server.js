@@ -53,13 +53,17 @@ async function loadModels() {
 // =============================
 // ✅ MIDDLEWARE
 // =============================
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // ✅ add PATCH
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
+const corsOptions = {
+  origin: function (origin, callback) {
+    callback(null, true);
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));
 
 app.use("/uploads", express.static("uploads"));
